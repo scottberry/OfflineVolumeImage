@@ -96,7 +96,7 @@ def parse_arguments():
         help='alpha_shape smoothing parameter'
     )
     parser.add_argument(
-        '--smooth', type=int, default=1.0,
+        '--smooth', type=int, default=1.2,
         help='surface volume image smoothing parameter'
     )
     parser.add_argument(
