@@ -89,7 +89,7 @@ class GenerateVolumeImagesParallel(ParallelTaskCollection):
 
         # find the site dimensions
         sites = tmaps_api.get_sites()
-        for site in list(sites[1]):
+        for site in sites:
             if site['plate_name'] == self.params.plate:
                 well_name = site['well_name']
                 x = site['x']

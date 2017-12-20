@@ -38,4 +38,4 @@ No\ Response\ Detected \
 No\ Response\ Detected \
 20171130-kim2-cytoo-scaling-FISH-unpatterned-unsorted \
 20171130-kim2-cytoo-scaling-FISH-unpatterned-unsorted \
---watch 5 -s test --plate plate01
+--watch 10 -s multi-plate --plate plate01
