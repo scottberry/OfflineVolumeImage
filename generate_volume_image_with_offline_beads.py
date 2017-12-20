@@ -80,7 +80,7 @@ def parse_arguments():
         help='min size of bead'
     )
     parser.add_argument(
-        '--minimum_bead_intensity', type=int, default=140,
+        '--minimum_bead_intensity', type=int, default=135,
         help='minimum_bead_intensity'
     )
     parser.add_argument(
