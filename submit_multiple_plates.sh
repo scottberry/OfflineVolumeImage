@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# limit used memory to 6GB
+#ulimit -v 6291456
+
 ./generate_volume_image_script_custom.py \
 -v --host 172.23.162.70 --username sberry --password sheeP6ep \
 --experiment \

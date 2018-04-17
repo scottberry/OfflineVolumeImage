@@ -9,7 +9,7 @@ from os.path import basename
 import gc3libs
 from gc3libs.cmdline import SessionBasedScript
 from gc3libs import Application
-from gc3libs.quantity import GB
+from gc3libs.quantity import GB, MB
 from gc3libs.workflow import SequentialTaskCollection, ParallelTaskCollection
 
 from tmclient import TmClient
@@ -139,5 +139,5 @@ class GenerateVolumeImagesApp(Application):
             output_dir=output_dir,
             stdout='stdout.txt',
             stderr='stderr.txt',
-            requested_memory=3 * GB
+            requested_memory=3750 * MB
         )
