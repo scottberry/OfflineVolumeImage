@@ -1,12 +1,13 @@
 #! /usr/bin/env python
 
 import os
+import re
 import sys
 import logging
 import argparse
 import numpy as np
-import itertools
 import tifffile as tiff
+import imageio
 from tmclient import TmClient
 from jtmodules import generate_volume_image as gvi
 from jtmodules import project
@@ -100,10 +101,6 @@ def parse_arguments():
         help='surface volume image smoothing parameter'
     )
     parser.add_argument(
-        '--z_extent', type=int, default=34,
-        help='number of z_slices'
-    )
-    parser.add_argument(
         '--input_path', type=str, required=True,
         help='path to directory containing bead images'
     )
@@ -112,10 +109,9 @@ def parse_arguments():
         help='path to write volume image'
     )
     parser.add_argument(
-        '--fname_stem', type=str,
-        default='20171130-kim2-cytoo-scaling-FISH-customY',
-        help=('stem of filename for bead channel (e.g. '
-              '20171130-kim2-cytoo-scaling-FISH-customY)')
+        '--channel_string', type=str,
+        default='C03',
+        help=('channel number for beads (e.g. C03)')
     )
 
     return(parser.parse_args())
@@ -159,6 +155,7 @@ def main(args):
     cells = _segmentSecondary(nuclei,se2D)
 
     wells = tmaps_api.get_wells()
+    sites = tmaps_api.get_sites()
 
     # find the site dimensions
     for well in wells:
@@ -168,23 +165,39 @@ def main(args):
     # convert the position into the Yokogawa field string
     field_str = str(args.well_pos_y * dimensions[1] + args.well_pos_x + 1).zfill(3)
 
-    # allocate the data structure for beads
-    sites = tmaps_api.get_sites()
-    beads3D = np.zeros(
-        (sites[0]['height'], sites[0]['width'], args.z_extent),
-        dtype=np.uint16
+    # find corresponding image files
+    beads_files_all = [os.path.basename(full_path) for full_path in glob.glob(args.input_path + '*' + args.channel_string + '.png')]
+    regex = (
+        r'[^_]+_' + args.well_name +
+        r'_T(?P<t>\d+)F' + field_str +
+        r'L\d+A\d+Z(?P<z>\d+)' + args.channel_string +
+        r'\.'
     )
+    search_exp = re.compile(regex)
+    beads_files_site = filter(search_exp.match, beads_files_all)
 
-    # read beads from file into numpy array
-    for i in range(0, args.z_extent):
-        fname = (
-            args.fname_stem + '_' +
-            args.well_name + '_T0001' +
-            'F' + field_str + 'L01A02Z' +
-            str(i + 1).zfill(2) + 'C03.tif'
+    for beads_file in beads_files_site:
+        # allocate the data structure for beads
+        beads3D = np.zeros(
+            (sites[0]['height'], sites[0]['width'], len(beads_files_site)),
+            dtype=np.uint16
         )
-        logger.debug('load {0}'.format(fname))
-        beads3D[:,:,i] = tiff.imread(os.path.join(args.input_path,fname))
+        logger.debug('load {0}'.format(beads_file))
+
+        # get z-position and extension from filename
+        matches = re.match(search_exp, beads_file)
+        index = int(matches.group('z')) - 1
+        file_type = os.path.splitext(beads_file)[1]
+
+        # load image into array
+        if file_type in set('tif','tiff','TIF','TIFF'):
+            beads3D[:,:,index] = tiff.imread(
+                os.path.join(args.input_path,beads_files_site)
+            )
+        elif file_type in set('.png','.PNG'):
+            beads3D[:,:,index] = imageio.imread(
+                os.path.join(args.input_path,beads_files_site)
+            )
 
     beads3D = np.ascontiguousarray(beads3D)
 
@@ -204,24 +217,24 @@ def main(args):
         plot=False
     )
 
-    vol_name = (args.fname_stem + '_' + args.well_name + '_T0001' +
-        'F' + field_str + 'L01A02Z01C04.tif')
-    surface_name = (args.fname_stem + '_' + args.well_name + '_T0001' +
-        'F' + field_str + 'L01A02Z01C05.tif')
-    max_proj_name = (args.fname_stem + '_' + args.well_name + '_T0001' +
-        'F' + field_str + 'L01A02Z01C06.tif')
+    vol_name = (args.experiment + '_' + args.well_name + '_T0001' +
+        'F' + field_str + 'L01A02Z01C04.png')
+    surface_name = (args.experiment + '_' + args.well_name + '_T0001' +
+        'F' + field_str + 'L01A02Z01C05.png')
+    max_proj_name = (args.experiment + '_' + args.well_name + '_T0001' +
+        'F' + field_str + 'L01A02Z01C06.png')
 
     if not os.path.exists(args.output_path):
         os.makedirs(args.output_path)
 
     logger.debug('saving {0}'.format(vol_name))
-    tiff.imsave(
+    imageio.imsave(
         file=os.path.join(args.output_path,vol_name),
         data=volume_image.volume_image.astype(np.uint16)
     )
 
     logger.debug('saving {0}'.format(surface_name))
-    tiff.imsave(
+    imageio.imsave(
         file=os.path.join(args.output_path,surface_name),
         data=volume_image.smoothed_surface_image.astype(np.uint16)
     )
@@ -233,7 +246,7 @@ def main(args):
         plot=False
     )
     logger.debug('saving {0}'.format(max_proj_name))
-    tiff.imsave(
+    imageio.imsave(
         file=os.path.join(args.output_path,max_proj_name),
         data=max_proj.projected_image.astype(np.uint16)
     )
