@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 import tifffile as tiff
 import imageio
+import glob
 from tmclient import TmClient
 from jtmodules import generate_volume_image as gvi
 from jtmodules import project
@@ -93,11 +94,11 @@ def parse_arguments():
         help='pixel size in microns'
     )
     parser.add_argument(
-        '--alpha', type=int, default=150,
+        '--alpha', type=int, default=250,
         help='alpha_shape smoothing parameter'
     )
     parser.add_argument(
-        '--smooth', type=int, default=1.2,
+        '--smooth', type=float, default=1.2,
         help='surface volume image smoothing parameter'
     )
     parser.add_argument(
@@ -167,36 +168,49 @@ def main(args):
 
     # find corresponding image files
     beads_files_all = [os.path.basename(full_path) for full_path in glob.glob(args.input_path + '*' + args.channel_string + '.png')]
-    regex = (
-        r'[^_]+_' + args.well_name +
-        r'_T(?P<t>\d+)F' + field_str +
-        r'L\d+A\d+Z(?P<z>\d+)' + args.channel_string +
-        r'\.'
-    )
+    regex = (r'(?P<stem>.+)_' + args.well_name + r'_T(?P<t>\d+)' +
+           r'F'+ field_str + 'L(?P<l>\d+)A(?P<a>\d+)Z(?P<z>\d+)'+ args.channel_string +'\.')
+
     search_exp = re.compile(regex)
     beads_files_site = filter(search_exp.match, beads_files_all)
 
-    for beads_file in beads_files_site:
-        # allocate the data structure for beads
-        beads3D = np.zeros(
-            (sites[0]['height'], sites[0]['width'], len(beads_files_site)),
-            dtype=np.uint16
+    if len(beads_files_site) > 0:
+        logger.debug(
+            'found %d matching bead images in %s',
+            len(beads_files_site),
+            args.input_path
         )
-        logger.debug('load {0}'.format(beads_file))
 
-        # get z-position and extension from filename
-        matches = re.match(search_exp, beads_file)
-        index = int(matches.group('z')) - 1
+    else:
+        logger.warning(
+            'found no bead images for well %s, field F%s in %s',
+            args.well_name,
+            field_str,
+            args.input_path
+        )
+        return
+
+    # allocate the data structure for beads
+    beads3D = np.zeros(
+        (sites[0]['height'], sites[0]['width'], len(beads_files_site)),
+        dtype=np.uint16
+    )
+
+    for index, beads_file in enumerate(sorted(beads_files_site)):
+
         file_type = os.path.splitext(beads_file)[1]
+        logger.debug('input file has extension %s',file_type)
 
         # load image into array
-        if file_type in set('tif','tiff','TIF','TIFF'):
+        if file_type in set(['.tif','.tiff','.TIF','.TIFF']):
+            logger.debug('loading z = %d from %s', index, beads_file)
             beads3D[:,:,index] = tiff.imread(
-                os.path.join(args.input_path,beads_files_site)
+                os.path.join(args.input_path,beads_file)
             )
-        elif file_type in set('.png','.PNG'):
+        elif file_type in set(['.png','.PNG']):
+            logger.debug('loading z = %d from %s', index, beads_file)
             beads3D[:,:,index] = imageio.imread(
-                os.path.join(args.input_path,beads_files_site)
+                os.path.join(args.input_path,beads_file)
             )
 
     beads3D = np.ascontiguousarray(beads3D)
@@ -217,26 +231,26 @@ def main(args):
         plot=False
     )
 
-    vol_name = (args.experiment + '_' + args.well_name + '_T0001' +
-        'F' + field_str + 'L01A02Z01C04.png')
-    surface_name = (args.experiment + '_' + args.well_name + '_T0001' +
-        'F' + field_str + 'L01A02Z01C05.png')
     max_proj_name = (args.experiment + '_' + args.well_name + '_T0001' +
-        'F' + field_str + 'L01A02Z01C06.png')
+                     'F' + field_str + 'L01A05Z01C01.png')
+    vol_name = (args.experiment + '_' + args.well_name + '_T0001' +
+                'F' + field_str + 'L01A05Z01C02.png')
+    surface_name = (args.experiment + '_' + args.well_name + '_T0001' +
+                    'F' + field_str + 'L01A05Z01C03.png')
 
     if not os.path.exists(args.output_path):
         os.makedirs(args.output_path)
 
     logger.debug('saving {0}'.format(vol_name))
-    imageio.imsave(
-        file=os.path.join(args.output_path,vol_name),
-        data=volume_image.volume_image.astype(np.uint16)
+    imageio.imwrite(
+        os.path.join(args.output_path,vol_name),
+        volume_image.volume_image.astype(np.uint16)
     )
 
     logger.debug('saving {0}'.format(surface_name))
-    imageio.imsave(
-        file=os.path.join(args.output_path,surface_name),
-        data=volume_image.smoothed_surface_image.astype(np.uint16)
+    imageio.imwrite(
+        os.path.join(args.output_path,surface_name),
+        volume_image.smoothed_surface_image.astype(np.uint16)
     )
 
     logger.debug('making maximum projection field {0}'.format(field_str))
@@ -246,9 +260,9 @@ def main(args):
         plot=False
     )
     logger.debug('saving {0}'.format(max_proj_name))
-    imageio.imsave(
-        file=os.path.join(args.output_path,max_proj_name),
-        data=max_proj.projected_image.astype(np.uint16)
+    imageio.imwrite(
+        os.path.join(args.output_path,max_proj_name),
+        max_proj.projected_image.astype(np.uint16)
     )
 
     return
@@ -261,18 +275,18 @@ def _segmentPrimary(dapi):
         method='niblack',
         kernel_size=211,
         constant=5,
-        min_threshold=118,
-        max_threshold=125
+        min_threshold=120,
+        max_threshold=130
     )
     nucleiFilledMask = fill.main(nucleiMask.mask)
     nucleiFilledMaskSeparated = separate_clumps.main(
         mask=nucleiFilledMask.filled_mask,
         intensity_image=dapiSmooth.smoothed_image,
-        min_area=5000,
-        max_area=50000,
-        min_cut_area=2000,
+        min_area=10000,
+        max_area=200000,
+        min_cut_area=4000,
         max_circularity=0.7,
-        max_convexity=0.92
+        max_convexity=0.885
     )
     nucleiFilledMaskFiltered = filter.main(
         mask=nucleiFilledMaskSeparated.separated_mask,
@@ -291,8 +305,8 @@ def _segmentSecondary(nuclei, celltrace):
     cells = segment_secondary.main(nuclei.objects,
                                    celltraceSmooth.smoothed_image,
                                    contrast_threshold=5,
-                                   min_threshold=118,
-                                   max_threshold=125)
+                                   min_threshold=135,
+                                   max_threshold=155)
     return cells
 
 
