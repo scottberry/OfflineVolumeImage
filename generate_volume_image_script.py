@@ -3,7 +3,7 @@
 import os
 from gc3libs.cmdline import SessionBasedScript
 from gc3libs import Application
-from gc3libs.quantity import GB
+from gc3libs.quantity import GB, minutes, hours
 from gc3libs.workflow import ParallelTaskCollection
 
 from tmclient import TmClient
@@ -201,5 +201,6 @@ class GenerateVolumeImagesApp(Application):
             output_dir=output_dir,
             stdout='stdout.txt',
             stderr='stderr.txt',
-            requested_memory=3 * GB
+            requested_memory=24 * GB,
+            requested_walltime=20 * minutes
         )
